@@ -8,13 +8,10 @@
   <!-- Tailwind Play CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    // Tailwind config for rounded, shadows, custom colors if needed
     tailwind.config = {
       theme: {
         extend: {
-          colors: {
-            primary: '#0f172a'
-          }
+          colors: { primary: '#0f172a' }
         }
       }
     }
@@ -25,11 +22,14 @@
 
   <style>
     body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
-    /* Small helper for event pill overflow */
     .line-clamp-1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* Simple swipe hint for weekly/daily */
     .swipe-hint { height: 4px; width: 40px; border-radius: 9999px; background: #e5e7eb; margin: 6px auto; }
   </style>
+
+  <!-- Firebase (compat SDK for easy browser usage) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
   <!-- React & ReactDOM UMD -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -44,90 +44,54 @@
     const { useState, useEffect, useMemo, useRef } = React;
 
     /***********************
+     * Your Firebase config (inserted)
+     ***********************/
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyCYpmwcYxEccp2UXTQ8K5u8cF7PdMqZCg8",
+      authDomain: "organizador-familiar-9223e.firebaseapp.com",
+      projectId: "organizador-familiar-9223e",
+      storageBucket: "organizador-familiar-9223e.firebasestorage.app",
+      messagingSenderId: "950216591742",
+      appId: "1:950216591742:web:c4b419dcb328ddb7510b2f",
+      measurementId: "G-ZCQ9VF4T09"
+    };
+
+    /***********************
      * Utilities
      ***********************/
-    function uid(prefix='id') {
-      return prefix + '_' + Math.random().toString(36).slice(2,9);
-    }
-
-    function isoDate(date) {
-      const d = new Date(date);
-      const year = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2,'0');
-      const day = String(d.getDate()).padStart(2,'0');
-      return `${year}-${m}-${day}`;
-    }
-
-    function addDays(dateStr, days) {
-      const d = new Date(dateStr + 'T00:00:00');
-      d.setDate(d.getDate() + days);
-      return isoDate(d);
-    }
-
-    function daysBetween(a, b) {
-      const da = new Date(a + 'T00:00:00');
-      const db = new Date(b + 'T00:00:00');
-      const diff = Math.round((db - da) / (1000*60*60*24));
-      return diff;
-    }
-
-    function startOfMonth(year, month) {
-      return isoDate(new Date(year, month, 1));
-    }
-    function endOfMonth(year, month) {
-      return isoDate(new Date(year, month + 1, 0));
-    }
-
-    function startOfWeek(dateStr) {
-      // start on Monday
-      const d = new Date(dateStr + 'T00:00:00');
-      const day = d.getDay(); // 0 Sun ... 6 Sat
-      const diff = (day === 0) ? -6 : 1 - day;
-      d.setDate(d.getDate() + diff);
-      return isoDate(d);
-    }
-
-    function formatDateHuman(dateStr) {
-      const d = new Date(dateStr + 'T00:00:00');
-      const options = { weekday: 'short', day: 'numeric', month: 'short' };
-      return d.toLocaleDateString(undefined, options);
-    }
-
-    function compareDates(a, b) {
-      if (a < b) return -1;
-      if (a > b) return 1;
-      return 0;
-    }
+    function uid(prefix='id') { return prefix + '_' + Math.random().toString(36).slice(2,9); }
+    function isoDate(date) { const d = new Date(date); const year = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const day = String(d.getDate()).padStart(2,'0'); return `${year}-${m}-${day}`; }
+    function addDays(dateStr, days) { const d = new Date(dateStr + 'T00:00:00'); d.setDate(d.getDate() + days); return isoDate(d); }
+    function startOfMonth(year, month) { return isoDate(new Date(year, month, 1)); }
+    function endOfMonth(year, month) { return isoDate(new Date(year, month + 1, 0)); }
+    function startOfWeek(dateStr) { const d = new Date(dateStr + 'T00:00:00'); const day = d.getDay(); const diff = (day === 0) ? -6 : 1 - day; d.setDate(d.getDate() + diff); return isoDate(d); }
+    function compareDates(a,b) { if (a < b) return -1; if (a > b) return 1; return 0; }
 
     /***********************
      * Local Storage Layer
      ***********************/
     const STORAGE_KEY = 'familyOrganizer.v1';
+    const SYNC_SHARE_KEY = 'familyOrganizer.shareId';
+    const SYNC_TS_KEY = 'familyOrganizer.lastUpdated';
 
     function loadState() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        const init = {
-          members: [ null, null, null, null ],
-          activeMemberId: null,
-          events: []
-        };
+        const init = { members: [ null, null, null, null ], activeMemberId: null, events: [] };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(init));
+        localStorage.setItem(SYNC_TS_KEY, '0');
         return init;
       }
       try {
         return JSON.parse(raw);
       } catch (e) {
-        console.error('Error parsing storage, resetting', e);
         const init = { members:[null,null,null,null], activeMemberId:null, events:[] };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(init));
+        localStorage.setItem(SYNC_TS_KEY, '0');
         return init;
       }
     }
-
-    function saveState(next) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    }
+    function saveState(next) { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); }
 
     /***********************
      * App
@@ -138,37 +102,76 @@
       const [editingSlotIndex, setEditingSlotIndex] = useState(null);
       const [showEventModal, setShowEventModal] = useState(false);
       const [editingEvent, setEditingEvent] = useState(null);
-      const [view, setView] = useState('month'); // month | week
-      const [cursor, setCursor] = useState(() => {
-        const today = new Date();
-        return { year: today.getFullYear(), month: today.getMonth(), date: isoDate(today) };
-      });
+      const [view, setView] = useState('month');
+      const [cursor, setCursor] = useState(() => { const t = new Date(); return { year: t.getFullYear(), month: t.getMonth(), date: isoDate(t) }; });
       const [filterMember, setFilterMember] = useState('all');
 
+      // Firebase/sync state
+      const [firebaseReady, setFirebaseReady] = useState(false);
+      const [shareId, setShareId] = useState(localStorage.getItem(SYNC_SHARE_KEY) || '');
+      const clientIdRef = useRef(uid('client'));
+      const unsubscribeRef = useRef(null);
+      const pushTimeoutRef = useRef(null);
+      const isApplyingRemote = useRef(false);
+
+      // init firebase once
+      useEffect(() => {
+        try {
+          if (window.firebase && !window._fbInited) {
+            firebase.initializeApp(FIREBASE_CONFIG);
+            window._fbInited = true;
+          }
+          // sign in anonymously
+          firebase.auth().signInAnonymously().catch(()=>{ /* ignore */ });
+          firebase.auth().onAuthStateChanged(user => {
+            setFirebaseReady(true);
+            // if shareId exists, start listening
+            const id = localStorage.getItem(SYNC_SHARE_KEY);
+            if (id) startSync(id);
+          });
+        } catch (e) {
+          console.warn('Firebase init error', e);
+        }
+      }, []);
+
+      // Save to localStorage always, and push to Firestore if syncing (debounced)
       useEffect(() => {
         saveState(store);
-      }, [store]);
+        if (!isApplyingRemote.current && shareId && firebaseReady && window.firebase) {
+          const ts = Date.now();
+          localStorage.setItem(SYNC_TS_KEY, String(ts));
+          if (pushTimeoutRef.current) clearTimeout(pushTimeoutRef.current);
+          pushTimeoutRef.current = setTimeout(() => {
+            try {
+              firebase.firestore().doc('shares/' + shareId).set({ state: store, lastUpdated: ts, clientId: clientIdRef.current });
+            } catch (e) { console.warn('push error', e); }
+          }, 600);
+        }
+      }, [store, shareId, firebaseReady]);
 
+      // helpers for members/events (same as before)
       const members = store.members;
       const activeMemberId = store.activeMemberId;
+
+      function setAndStore(next) {
+        setStore(next);
+      }
 
       function upsertMember(index, member) {
         const arr = [...store.members];
         arr[index] = member;
         const next = { ...store, members: arr, activeMemberId: member?.id ?? store.activeMemberId };
-        setStore(next);
+        setAndStore(next);
       }
 
-      function selectActive(memberId) {
-        setStore({ ...store, activeMemberId: memberId });
-      }
+      function selectActive(memberId) { setAndStore({ ...store, activeMemberId: memberId }); }
 
       function removeMember(index) {
         const arr = [...store.members];
         const removed = arr[index];
         arr[index] = null;
         const nextActive = (store.activeMemberId === removed?.id) ? null : store.activeMemberId;
-        setStore({ ...store, members: arr, activeMemberId: nextActive });
+        setAndStore({ ...store, members: arr, activeMemberId: nextActive });
       }
 
       function saveEvent(event) {
@@ -181,18 +184,17 @@
           event.id = uid('ev');
           events.push(event);
         }
-        setStore({ ...store, events });
+        setAndStore({ ...store, events });
       }
 
       function deleteEventById(id) {
-        let events = store.events.filter(e => e.id !== id);
-        setStore({ ...store, events });
+        const events = store.events.filter(e => e.id !== id);
+        setAndStore({ ...store, events });
       }
 
       function deleteSeries(masterId) {
         const events = store.events.filter(e => e.id !== masterId && e.masterId !== masterId);
-        // also remove any exdates on other masters? Not needed.
-        setStore({ ...store, events });
+        setAndStore({ ...store, events });
       }
 
       function addExdateToMaster(masterId, dateStr) {
@@ -204,7 +206,7 @@
           }
           return e;
         });
-        setStore({ ...store, events });
+        setAndStore({ ...store, events });
       }
 
       function createOverrideForInstance(master, overrideData) {
@@ -221,8 +223,7 @@
           masterId: master.id,
           exdates: []
         };
-        const events = [...store.events, newEv];
-        setStore({ ...store, events });
+        setAndStore({ ...store, events: [...store.events, newEv] });
       }
 
       function eventsInRange(startDate, endDate) {
@@ -266,104 +267,120 @@
         return visible;
       }
 
+      // Calendar navigation
       function gotoPrev() {
         if (view === 'month') {
-          const y = cursor.year;
-          const m = cursor.month - 1;
-          const d = new Date(y, m, 1);
+          const y = cursor.year; const m = cursor.month - 1; const d = new Date(y, m, 1);
           setCursor({ year: d.getFullYear(), month: d.getMonth(), date: isoDate(d) });
         } else {
-          const newDate = addDays(cursor.date, -7);
-          const dd = new Date(newDate + 'T00:00:00');
+          const newDate = addDays(cursor.date, -7); const dd = new Date(newDate + 'T00:00:00');
           setCursor({ year: dd.getFullYear(), month: dd.getMonth(), date: newDate });
         }
       }
       function gotoNext() {
         if (view === 'month') {
-          const y = cursor.year;
-          const m = cursor.month + 1;
-          const d = new Date(y, m, 1);
+          const y = cursor.year; const m = cursor.month + 1; const d = new Date(y, m, 1);
           setCursor({ year: d.getFullYear(), month: d.getMonth(), date: isoDate(d) });
         } else {
-          const newDate = addDays(cursor.date, 7);
-          const dd = new Date(newDate + 'T00:00:00');
+          const newDate = addDays(cursor.date, 7); const dd = new Date(newDate + 'T00:00:00');
           setCursor({ year: dd.getFullYear(), month: dd.getMonth(), date: newDate });
         }
       }
-      function gotoToday() {
-        const today = new Date();
-        setCursor({ year: today.getFullYear(), month: today.getMonth(), date: isoDate(today) });
-      }
+      function gotoToday() { const t = new Date(); setCursor({ year: t.getFullYear(), month: t.getMonth(), date: isoDate(t) }); }
 
-      function openProfileModal(index) {
-        setEditingSlotIndex(index);
-        setShowProfileModal(true);
-      }
-
+      // Event modal handling
+      function openProfileModal(index) { setEditingSlotIndex(index); setShowProfileModal(true); }
       function openNewEventModal(date) {
         const preMember = activeMemberId || (members.find(m=>m)?.id) || null;
-        setEditingEvent({
-          id: null,
-          title: '',
-          type: 'Tarea',
-          date: date || cursor.date,
-          time: '',
-          memberId: preMember,
-          color: preMember ? (members.find(m=>m && m.id===preMember)?.color) : '#60a5fa',
-          repeatWeekly: false,
-          endDate: '',
-          exdates: []
-        });
+        setEditingEvent({ id: null, title: '', type: 'Tarea', date: date || cursor.date, time: '', memberId: preMember, color: preMember ? (members.find(m=>m && m.id===preMember)?.color) : '#60a5fa', repeatWeekly: false, endDate: '', exdates: [] });
         setShowEventModal(true);
       }
-
       function openEditEventModal(event, instanceDate=null) {
         if (event.isInstanceOfMaster && !event.isOverride) {
-          setEditingEvent({
-            id: null,
-            editingMaster: event,
-            title: event.title,
-            type: event.type,
-            date: instanceDate || event.instanceDate,
-            time: event.time || '',
-            memberId: event.memberId,
-            color: event.color,
-            repeatWeekly: false,
-            exdates: []
-          });
+          setEditingEvent({ id: null, editingMaster: event, title: event.title, type: event.type, date: instanceDate || event.instanceDate, time: event.time || '', memberId: event.memberId, color: event.color, repeatWeekly: false, exdates: [] });
           setShowEventModal(true);
         } else {
           const original = store.events.find(e => e.id === event.id) || event;
-          setEditingEvent({ ...original });
-          setShowEventModal(true);
+          setEditingEvent({ ...original }); setShowEventModal(true);
         }
       }
 
       const visibleRange = useMemo(() => {
-        if (view === 'month') {
-          const y = cursor.year;
-          const m = cursor.month;
-          const start = startOfMonth(y,m);
-          const end = endOfMonth(y,m);
-          return { start, end };
-        } else {
-          const start = startOfWeek(cursor.date);
-          const end = addDays(start, 6);
-          return { start, end };
-        }
+        if (view === 'month') { const y = cursor.year; const m = cursor.month; return { start: startOfMonth(y,m), end: endOfMonth(y,m) }; }
+        else { const start = startOfWeek(cursor.date); return { start, end: addDays(start,6) }; }
       }, [view, cursor]);
 
-      const visibleEvents = useMemo(() => {
-        return eventsInRange(visibleRange.start, visibleRange.end);
-      }, [store.events, visibleRange]);
+      const visibleEvents = useMemo(() => eventsInRange(visibleRange.start, visibleRange.end), [store.events, visibleRange]);
+      const filteredEvents = visibleEvents.filter(ev => filterMember === 'all' ? true : ev.memberId === filterMember);
 
-      const filteredEvents = visibleEvents.filter(ev => {
-        if (filterMember === 'all') return true;
-        return ev.memberId === filterMember;
-      });
+      // --- Firebase sync functions ---
+      function startSync(id) {
+        if (!window.firebase) return alert('Firebase no está disponible. Comprueba conexión al SDK.');
+        if (unsubscribeRef.current) { try { unsubscribeRef.current(); } catch(e){} unsubscribeRef.current = null; }
+        const docRef = firebase.firestore().doc('shares/' + id);
+        unsubscribeRef.current = docRef.onSnapshot(snap => {
+          if (!snap.exists) return;
+          const data = snap.data();
+          const remoteTS = data.lastUpdated || 0;
+          const localTS = Number(localStorage.getItem(SYNC_TS_KEY) || 0);
+          if (data.clientId === clientIdRef.current) return; // ignore our own writes
+          if (remoteTS > localTS) {
+            isApplyingRemote.current = true;
+            if (data.state) {
+              setStore(data.state);
+              localStorage.setItem(SYNC_TS_KEY, String(remoteTS));
+            }
+            setTimeout(()=> { isApplyingRemote.current = false; }, 500);
+          }
+        }, err => { console.warn('snapshot err', err); });
+      }
 
-      const memberList = members.map((m, i) => ({ slot: i, data: m })).filter(x => x.data);
+      async function createShare() {
+        if (!window.firebase) return alert('Firebase no disponible');
+        const id = uid('share');
+        try {
+          await firebase.firestore().doc('shares/' + id).set({ state: store, lastUpdated: Date.now(), clientId: clientIdRef.current });
+          localStorage.setItem(SYNC_SHARE_KEY, id);
+          setShareId(id);
+          startSync(id);
+          return id;
+        } catch (e) { console.warn(e); alert('Error al crear el share'); }
+      }
 
+      async function connectShare(id) {
+        if (!window.firebase) return alert('Firebase no disponible');
+        if (!id) return alert('Introduce un shareId válido');
+        try {
+          const docRef = firebase.firestore().doc('shares/' + id);
+          const snap = await docRef.get();
+          if (snap.exists) {
+            const data = snap.data();
+            if (data.state) {
+              isApplyingRemote.current = true;
+              setStore(data.state);
+              localStorage.setItem(SYNC_TS_KEY, String(data.lastUpdated || Date.now()));
+              setTimeout(()=> { isApplyingRemote.current = false; }, 500);
+            }
+          } else {
+            // create doc with our local state
+            await docRef.set({ state: store, lastUpdated: Date.now(), clientId: clientIdRef.current });
+          }
+          localStorage.setItem(SYNC_SHARE_KEY, id);
+          setShareId(id);
+          startSync(id);
+        } catch (e) { console.warn(e); alert('No se pudo conectar al shareId'); }
+      }
+
+      function disconnectShare() {
+        if (unsubscribeRef.current) { try { unsubscribeRef.current(); } catch(e){} unsubscribeRef.current = null; }
+        localStorage.removeItem(SYNC_SHARE_KEY);
+        setShareId('');
+      }
+
+      // small helper for copying
+      function copyToClipboard(text) { navigator.clipboard?.writeText(text).then(()=>alert('Copiado al portapapeles')); }
+
+      // Render
       return (
         <div className="min-h-screen pb-24">
           <div className="max-w-xl mx-auto p-4">
@@ -392,33 +409,14 @@
 
               <div className="mt-3">
                 {view === 'month'
-                  ? <MonthView
-                      year={cursor.year}
-                      month={cursor.month}
-                      events={filteredEvents}
-                      members={members}
-                      onDayClick={(d)=>openNewEventModal(d)}
-                      onEventClick={(ev)=>openEditEventModal(ev, ev.instanceDate)}
-                      activeMemberId={activeMemberId}
-                    />
-                  : <WeekView
-                      startDate={visibleRange.start}
-                      events={filteredEvents}
-                      members={members}
-                      onDayClick={(d)=>openNewEventModal(d)}
-                      onEventClick={(ev)=>openEditEventModal(ev, ev.instanceDate)}
-                      activeMemberId={activeMemberId}
-                    />
+                  ? <MonthView year={cursor.year} month={cursor.month} events={filteredEvents} members={members} onDayClick={(d)=>openNewEventModal(d)} onEventClick={(ev)=>openEditEventModal(ev, ev.instanceDate)} activeMemberId={activeMemberId} />
+                  : <WeekView startDate={visibleRange.start} events={filteredEvents} members={members} onDayClick={(d)=>openNewEventModal(d)} onEventClick={(ev)=>openEditEventModal(ev, ev.instanceDate)} activeMemberId={activeMemberId} />
                 }
               </div>
 
               <div className="mt-4 flex gap-2 items-center">
-                <button className="flex-1 bg-slate-900 text-white px-4 py-3 rounded-lg shadow" onClick={()=>openNewEventModal(cursor.date)}>
-                  + Añadir evento
-                </button>
-                <button className="bg-white border border-slate-200 px-3 py-3 rounded-lg text-slate-700 shadow-sm" onClick={()=>{ setShowProfileModal(true); }}>
-                  Perfiles
-                </button>
+                <button className="flex-1 bg-slate-900 text-white px-4 py-3 rounded-lg shadow" onClick={()=>openNewEventModal(cursor.date)}>+ Añadir evento</button>
+                <button className="bg-white border border-slate-200 px-3 py-3 rounded-lg text-slate-700 shadow-sm" onClick={()=>{ setShowProfileModal(true); }}>Perfiles</button>
               </div>
             </div>
           </div>
@@ -453,6 +451,12 @@
               editingSlotIndex={editingSlotIndex}
               setEditingSlotIndex={setEditingSlotIndex}
               onRemove={removeMember}
+              // sync props
+              firebaseReady={firebaseReady}
+              shareId={shareId}
+              createShare={createShare}
+              connectShare={connectShare}
+              disconnectShare={disconnectShare}
             />
           )}
 
@@ -462,32 +466,19 @@
               members={members}
               onClose={() => { setShowEventModal(false); setEditingEvent(null); }}
               onSave={(ev)=> {
-                if (ev.editingMaster) {
-                  createOverrideForInstance(ev.editingMaster, ev);
-                } else {
-                  if (ev.id) {
-                    saveEvent(ev);
-                  } else {
-                    saveEvent(ev);
-                  }
-                }
-                setShowEventModal(false);
-                setEditingEvent(null);
+                if (ev.editingMaster) createOverrideForInstance(ev.editingMaster, ev);
+                else saveEvent(ev);
+                setShowEventModal(false); setEditingEvent(null);
               }}
               onDelete={(ev)=>{
-                if (ev.editingMaster) {
-                  addExdateToMaster(ev.editingMaster.id, ev.date);
-                } else {
-                  deleteEventById(ev.id);
-                }
-                setShowEventModal(false);
-                setEditingEvent(null);
+                if (ev.editingMaster) addExdateToMaster(ev.editingMaster.id, ev.date);
+                else deleteEventById(ev.id);
+                setShowEventModal(false); setEditingEvent(null);
               }}
               onDeleteSeries={(masterId)=>{
                 if (confirm('¿Eliminar toda la serie? Esta acción borrará la extraescolar recurrente y sus sobrescrituras.')) {
                   deleteSeries(masterId);
-                  setShowEventModal(false);
-                  setEditingEvent(null);
+                  setShowEventModal(false); setEditingEvent(null);
                 }
               }}
               activeMemberId={activeMemberId}
@@ -501,8 +492,6 @@
      * Header
      ***********************/
     function Header({ members, activeMemberId, onOpenProfile, onOpenProfileSlot, onSelectActive, filterMember, setFilterMember }) {
-      const hasMembers = members.some(Boolean);
-      const active = members.find(m => m && m.id === activeMemberId);
       return (
         <div className="flex items-center justify-between">
           <div>
@@ -514,8 +503,7 @@
               {members.map((m, idx) => m ? (
                 <button key={m.id} onClick={() => onSelectActive(m.id)}
                   className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${activeMemberId===m.id ? 'ring-2 ring-offset-1 ring-slate-900' : 'bg-white shadow'}`}
-                  style={{ backgroundColor: m.color, color: '#fff' }}
-                  title={m.name}>
+                  style={{ backgroundColor: m.color, color: '#fff' }} title={m.name}>
                   {m.avatarEmoji || m.name?.[0]?.toUpperCase() || '👤'}
                 </button>
               ) : (
@@ -531,54 +519,27 @@
     }
 
     /***********************
-     * Profile Manager (modal)
+     * Profile Manager (modal) — now with Sync UI
      ***********************/
-    function ProfileManager({ members, onClose, onUpsert, onSelectActive, activeMemberId, editingSlotIndex, setEditingSlotIndex, onRemove }) {
+    function ProfileManager({ members, onClose, onUpsert, onSelectActive, activeMemberId, editingSlotIndex, setEditingSlotIndex, onRemove, firebaseReady, shareId, createShare, connectShare, disconnectShare }) {
       const [local, setLocal] = useState(() => members.map(m => m ? { ...m } : null));
       const [slot, setSlot] = useState(editingSlotIndex ?? 0);
+      const [connectInput, setConnectInput] = useState('');
       const fileRef = useRef();
 
-      useEffect(()=> {
-        if (editingSlotIndex != null) setSlot(editingSlotIndex);
-      }, [editingSlotIndex]);
+      useEffect(()=> { if (editingSlotIndex != null) setSlot(editingSlotIndex); }, [editingSlotIndex]);
+      useEffect(()=> { setLocal(members.map(m => m ? { ...m } : null)); }, [members]);
 
-      function openEditorFor(i) {
-        setSlot(i);
-        setEditingSlotIndex(i);
-      }
-
-      function updateSlot(i, next) {
-        const arr = [...local];
-        arr[i] = next;
-        setLocal(arr);
-      }
-
-      function saveSlot(i) {
-        const m = local[i];
-        if (!m) return;
-        const toSave = { ...m };
-        if (!toSave.id) toSave.id = uid('mb');
-        onUpsert(i, toSave);
-      }
-
+      function openEditorFor(i) { setSlot(i); setEditingSlotIndex(i); }
+      function updateSlot(i, next) { const arr = [...local]; arr[i] = next; setLocal(arr); }
+      function saveSlot(i) { const m = local[i]; if (!m) return; const toSave = { ...m }; if (!toSave.id) toSave.id = uid('mb'); onUpsert(i, toSave); }
       function handleImageUpload(e, i) {
-        const f = e.target.files[0];
-        if (!f) return;
+        const f = e.target.files[0]; if (!f) return;
         const reader = new FileReader();
-        reader.onload = () => {
-          const arr = [...local];
-          arr[i] = { ...(arr[i]||{}), avatarDataUrl: reader.result };
-          setLocal(arr);
-        };
+        reader.onload = () => { const arr = [...local]; arr[i] = { ...(arr[i]||{}), avatarDataUrl: reader.result }; setLocal(arr); };
         reader.readAsDataURL(f);
       }
-
-      function clearSlot(i) {
-        const arr = [...local];
-        arr[i] = null;
-        setLocal(arr);
-        onRemove(i);
-      }
+      function clearSlot(i) { const arr = [...local]; arr[i] = null; setLocal(arr); onRemove(i); }
 
       return (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
@@ -586,7 +547,7 @@
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold">Perfiles de la familia</h3>
-                <p className="text-sm text-slate-500">Hasta 4 miembros — se guardan en tu navegador</p>
+                <p className="text-sm text-slate-500">Hasta 4 miembros — se guardan en tu navegador (o sincroniza con Firebase)</p>
               </div>
               <div className="flex items-center gap-2">
                 <button className="text-sm text-slate-600" onClick={onClose}>Cerrar</button>
@@ -631,14 +592,40 @@
             <div className="mt-4">
               <div className="text-sm font-medium">Editor</div>
               <div className="mt-2 bg-white p-3 rounded-lg">
-                <ProfileEditor
-                  value={local[slot]}
-                  onChange={(next) => updateSlot(slot, next)}
-                  onUploadFile={(e) => handleImageUpload(e, slot)}
-                  onSave={() => saveSlot(slot)}
-                />
+                <ProfileEditor value={local[slot]} onChange={(next) => updateSlot(slot, next)} onUploadFile={(e) => handleImageUpload(e, slot)} onSave={() => saveSlot(slot)} />
               </div>
             </div>
+
+            <div className="mt-4">
+              <div className="text-sm font-medium">Sincronización (Firebase)</div>
+              <div className="mt-2 bg-white p-3 rounded-lg space-y-2 text-sm">
+                <div className="text-xs text-slate-500">Estado Firebase: <span className="font-medium">{firebaseReady ? 'Listo' : 'No conectado'}</span></div>
+
+                <div className="flex gap-2">
+                  <button onClick={async ()=>{ const id = await createShare(); if (id) { copyToClipboard(id); alert('Código creado y copiado: ' + id); } }} className="px-3 py-2 bg-slate-900 text-white rounded">Crear código para compartir</button>
+                  <button onClick={()=> { if (shareId) { copyToClipboard(shareId); alert('Código copiado: ' + shareId); } else alert('No hay código activo'); }} className="px-3 py-2 bg-white border rounded">Copiar código actual</button>
+                </div>
+
+                <div className="pt-2">
+                  <label className="text-xs text-slate-500">Conectar a un código (pega aquí)</label>
+                  <div className="flex gap-2 mt-1">
+                    <input className="flex-1 border rounded px-3 py-2" placeholder="shareId" value={connectInput} onChange={e=>setConnectInput(e.target.value)} />
+                    <button className="px-3 py-2 bg-white border rounded" onClick={()=>connectShare(connectInput)}>Conectar</button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-slate-500">Conectado a:</div>
+                  <div className="text-sm font-medium">{shareId || '—'}</div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button className="px-3 py-2 bg-white border rounded" onClick={()=>{ disconnectShare(); alert('Desconectado'); }}>Desconectar</button>
+                  <div className="text-xs text-slate-400 self-center">Nota: habilita Authentication > Anonymous en Firebase y reglas Firestore para clientes autenticados.</div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       );
@@ -647,23 +634,12 @@
     function ProfileEditor({ value, onChange, onUploadFile, onSave }) {
       const local = value || { name: '', avatarEmoji: '👤', color: '#60a5fa' };
       const [form, setForm] = useState(local);
-
-      useEffect(()=> {
-        setForm(local);
-      }, [value]);
-
-      function update(k, v) {
-        const next = { ...form, [k]: v };
-        setForm(next);
-        onChange && onChange(next);
-      }
-
+      useEffect(()=> { setForm(local); }, [value]);
+      function update(k,v) { const next = { ...form, [k]: v }; setForm(next); onChange && onChange(next); }
       return (
         <>
           <div className="flex items-center gap-3">
-            <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ backgroundColor: form.color, color: '#fff' }}>
-              {form.avatarEmoji || form.name?.[0]?.toUpperCase() || '👤'}
-            </div>
+            <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ backgroundColor: form.color, color: '#fff' }}>{form.avatarEmoji || form.name?.[0]?.toUpperCase() || '👤'}</div>
             <div className="flex-1">
               <input className="w-full border rounded px-3 py-2" placeholder="Nombre" value={form.name} onChange={e=>update('name', e.target.value)} />
               <div className="mt-2 flex gap-2">
@@ -672,13 +648,11 @@
               </div>
             </div>
           </div>
-
           <div className="mt-3">
             <label className="block text-xs text-slate-500">Foto (opcional)</label>
             <input type="file" accept="image/*" className="mt-1" onChange={onUploadFile} />
             <div className="text-xs text-slate-400 mt-2">La imagen se guarda en tu navegador (localStorage).</div>
           </div>
-
           <div className="mt-3 flex justify-end">
             <button className="px-4 py-2 bg-slate-900 text-white rounded" onClick={onSave}>Guardar</button>
           </div>
@@ -687,9 +661,9 @@
     }
 
     /***********************
-     * MonthView
+     * MonthView, WeekView, EventModal (unchanged behavior)
      ***********************/
-    function MonthView({ year, month, events, members, onDayClick, onEventClick, activeMemberId }) {
+    function MonthView({ year, month, events, members, onDayClick, onEventClick }) {
       const first = new Date(year, month, 1);
       const startDay = first.getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -702,35 +676,21 @@
         const dayEvents = date ? events.filter(ev => ev.instanceDate === date) : [];
         return { date, dayNumber, valid, events: dayEvents };
       });
-
       const weekdayLabels = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-
       return (
         <div className="bg-white rounded-2xl p-3 shadow-sm">
-          <div className="text-center mb-2">
-            <div className="text-sm font-medium">{first.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</div>
-          </div>
-          <div className="grid grid-cols-7 gap-1 text-xs">
-            {weekdayLabels.map((w)=> <div key={w} className="text-center text-slate-500">{w}</div>)}
-          </div>
-
+          <div className="text-center mb-2"><div className="text-sm font-medium">{first.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</div></div>
+          <div className="grid grid-cols-7 gap-1 text-xs">{weekdayLabels.map((w)=> <div key={w} className="text-center text-slate-500">{w}</div>)}</div>
           <div className="grid grid-cols-7 gap-1 mt-2 text-sm">
             {cells.map((c, i) => (
               <div key={i} className={`min-h-[72px] p-1 rounded-lg ${c.valid ? 'bg-white' : 'bg-transparent'}`} onClick={()=>c.valid && onDayClick(c.date)}>
-                <div className="flex items-start justify-between">
-                  <div className={`text-xs font-medium ${c.valid ? 'text-slate-700' : 'text-slate-400'}`}>{c.valid ? c.dayNumber : ''}</div>
-                </div>
+                <div className="flex items-start justify-between"><div className={`text-xs font-medium ${c.valid ? 'text-slate-700' : 'text-slate-400'}`}>{c.valid ? c.dayNumber : ''}</div></div>
                 <div className="mt-1 flex flex-col gap-1">
                   {c.events.slice(0,2).map(ev => {
                     const member = members.find(m=>m && m.id===ev.memberId);
                     const color = member ? member.color : (ev.color || '#60a5fa');
                     return (
-                      <button key={ev.id + '_' + ev.instanceDate}
-                        onClick={(e)=>{ e.stopPropagation(); onEventClick(ev); }}
-                        className="text-[12px] line-clamp-1 px-1 py-0.5 rounded-md text-white"
-                        style={{ backgroundColor: color }}>
-                        {ev.time ? ev.time + ' ' : ''}{ev.title}
-                      </button>
+                      <button key={ev.id + '_' + ev.instanceDate} onClick={(e)=>{ e.stopPropagation(); onEventClick(ev); }} className="text-[12px] line-clamp-1 px-1 py-0.5 rounded-md text-white" style={{ backgroundColor: color }}>{ev.time ? ev.time + ' ' : ''}{ev.title}</button>
                     );
                   })}
                   {c.events.length > 2 && <div className="text-[11px] text-slate-400">+{c.events.length-2} más</div>}
@@ -742,10 +702,7 @@
       );
     }
 
-    /***********************
-     * WeekView
-     ***********************/
-    function WeekView({ startDate, events, members, onDayClick, onEventClick, activeMemberId }) {
+    function WeekView({ startDate, events, members, onDayClick, onEventClick }) {
       const days = Array.from({length:7}).map((_,i)=> addDays(startDate, i));
       return (
         <div className="bg-white rounded-2xl p-3 shadow-sm overflow-x-auto">
@@ -765,22 +722,16 @@
                     <button onClick={()=>onDayClick(d)} className="text-xs text-slate-600">Añadir</button>
                   </div>
                   <div className="mt-2 flex flex-col gap-2">
-                    {dayEvents.length ? (
-                      dayEvents.map(ev => {
-                        const member = members.find(m=>m && m.id===ev.memberId);
-                        const color = member ? member.color : (ev.color || '#60a5fa');
-                        return (
-                          <button key={ev.id + '_' + ev.instanceDate} onClick={()=>onEventClick(ev)}
-                            className="w-full text-left rounded-lg px-2 py-1 flex items-center gap-2"
-                            style={{ backgroundColor: color, color: '#fff' }}>
-                            <div className="text-xs font-semibold">{ev.time || '—'}</div>
-                            <div className="text-xs line-clamp-1">{ev.title}</div>
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <div className="text-xs text-slate-400">Sin eventos</div>
-                    )}
+                    {dayEvents.length ? dayEvents.map(ev => {
+                      const member = members.find(m=>m && m.id===ev.memberId);
+                      const color = member ? member.color : (ev.color || '#60a5fa');
+                      return (
+                        <button key={ev.id + '_' + ev.instanceDate} onClick={()=>onEventClick(ev)} className="w-full text-left rounded-lg px-2 py-1 flex items-center gap-2" style={{ backgroundColor: color, color: '#fff' }}>
+                          <div className="text-xs font-semibold">{ev.time || '—'}</div>
+                          <div className="text-xs line-clamp-1">{ev.title}</div>
+                        </button>
+                      );
+                    }) : <div className="text-xs text-slate-400">Sin eventos</div>}
                   </div>
                 </div>
               );
@@ -790,53 +741,33 @@
       );
     }
 
-    /***********************
-     * Event Modal
-     ***********************/
-    function EventModal({ event, members, onClose, onSave, onDelete, onDeleteSeries, activeMemberId }) {
+    function EventModal({ event, members, onClose, onSave, onDelete, onDeleteSeries }) {
       const [form, setForm] = useState({ ...event });
       useEffect(()=> setForm({ ...event }), [event]);
-
-      function update(k, v) {
-        setForm(prev => ({ ...prev, [k]: v }));
-      }
-
+      function update(k,v) { setForm(prev => ({ ...prev, [k]: v })); }
       function save() {
-        if (!form.title || !form.date) {
-          alert('Añade título y fecha');
-          return;
-        }
+        if (!form.title || !form.date) return alert('Añade título y fecha');
         if (form.repeatWeekly && form.type === 'Extraescolar' && form.endDate) {
-          if (compareDates(form.endDate, form.date) < 0) {
-            alert('La fecha de fin debe ser igual o posterior a la fecha de inicio.');
-            return;
-          }
+          if (compareDates(form.endDate, form.date) < 0) return alert('La fecha de fin debe ser igual o posterior a la fecha de inicio.');
         }
         onSave(form);
       }
-
       function remove() {
         if (form.editingMaster) {
-          if (confirm('¿Eliminar esta instancia? (se añadirá una excepción a la serie)')) {
-            onDelete(form);
-          }
+          if (confirm('¿Eliminar esta instancia? (se añadirá una excepción a la serie)')) onDelete(form);
         } else if (form.repeatWeekly) {
-          // master event
-          if (confirm('Esta es una extraescolar recurrente. Para borrar puedes eliminar una instancia concreta o toda la serie. ¿Eliminar toda la serie?')) {
-            onDeleteSeries(form.id);
-          }
+          if (confirm('Esta es una extraescolar recurrente. ¿Eliminar toda la serie?')) onDeleteSeries(form.id);
         } else {
           if (confirm('¿Eliminar este evento?')) onDelete(form);
         }
       }
-
       return (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
           <div className="bg-white w-full sm:w-96 rounded-t-2xl sm:rounded-2xl p-4 shadow-lg">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold">{form.editingMaster ? 'Editar instancia' : (form.id ? 'Editar evento' : 'Nuevo evento')}</h3>
-                <div className="text-xs text-slate-500">Guarda en localStorage • Puedes marcar repetición semanal</div>
+                <div className="text-xs text-slate-500">Puedes marcar repetición semanal</div>
               </div>
               <div className="flex items-center gap-2">
                 <button className="text-sm text-slate-600" onClick={onClose}>Cerrar</button>
@@ -844,45 +775,26 @@
             </div>
 
             <div className="mt-3 space-y-3">
-              <div>
-                <label className="block text-xs text-slate-500">Título</label>
-                <input className="w-full border rounded px-3 py-2" value={form.title} onChange={e=>update('title', e.target.value)} />
-              </div>
+              <div><label className="block text-xs text-slate-500">Título</label><input className="w-full border rounded px-3 py-2" value={form.title} onChange={e=>update('title', e.target.value)} /></div>
 
               <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs text-slate-500">Fecha</label>
-                  <input type="date" className="w-full border rounded px-3 py-2" value={form.date} onChange={e=>update('date', e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500">Hora</label>
-                  <input type="time" className="w-full border rounded px-3 py-2" value={form.time || ''} onChange={e=>update('time', e.target.value)} />
-                </div>
+                <div><label className="block text-xs text-slate-500">Fecha</label><input type="date" className="w-full border rounded px-3 py-2" value={form.date} onChange={e=>update('date', e.target.value)} /></div>
+                <div><label className="block text-xs text-slate-500">Hora</label><input type="time" className="w-full border rounded px-3 py-2" value={form.time || ''} onChange={e=>update('time', e.target.value)} /></div>
               </div>
 
-              <div>
-                <label className="block text-xs text-slate-500">Tipo</label>
+              <div><label className="block text-xs text-slate-500">Tipo</label>
                 <select className="w-full border rounded px-3 py-2" value={form.type} onChange={e=>update('type', e.target.value)}>
-                  <option>Tarea</option>
-                  <option>Examen</option>
-                  <option>Extraescolar</option>
-                  <option>Nota</option>
-                  <option>Otro</option>
+                  <option>Tarea</option><option>Examen</option><option>Extraescolar</option><option>Nota</option><option>Otro</option>
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs text-slate-500">Miembro asignado</label>
+              <div><label className="block text-xs text-slate-500">Miembro asignado</label>
                 <select className="w-full border rounded px-3 py-2" value={form.memberId || ''} onChange={e=>update('memberId', e.target.value)}>
-                  <option value=''>(Sin asignar)</option>
-                  {members.map((m, i) => m && <option key={m.id} value={m.id}>{m.name}</option>)}
+                  <option value=''>(Sin asignar)</option>{members.map((m,i)=>m && <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </div>
 
-              <div className="flex items-center gap-2">
-                <input id="repeatWeekly" type="checkbox" checked={form.repeatWeekly || false} onChange={e=>update('repeatWeekly', e.target.checked)} />
-                <label htmlFor="repeatWeekly" className="text-sm text-slate-600">Repetir semanalmente (ideal para extraescolares)</label>
-              </div>
+              <div className="flex items-center gap-2"><input id="repeatWeekly" type="checkbox" checked={form.repeatWeekly || false} onChange={e=>update('repeatWeekly', e.target.checked)} /><label htmlFor="repeatWeekly" className="text-sm text-slate-600">Repetir semanalmente (ideal para extraescolares)</label></div>
 
               {(form.repeatWeekly && form.type === 'Extraescolar') && (
                 <div>
@@ -892,9 +804,7 @@
                 </div>
               )}
 
-              {form.editingMaster && (
-                <div className="text-xs text-slate-500">Estás editando solo esta instancia (se creará una excepción en la serie). Para cambiar la serie completa, edita el evento maestro si está disponible.</div>
-              )}
+              {form.editingMaster && (<div className="text-xs text-slate-500">Editando solo esta instancia (se creará una excepción en la serie).</div>)}
 
               <div className="flex items-center gap-2 justify-between mt-3">
                 <div className="flex items-center gap-2">
@@ -915,7 +825,7 @@
                     <button className="px-4 py-2 bg-red-600 text-white rounded" onClick={()=>{ if (confirm('Eliminar toda la serie?')) onDeleteSeries(form.id); }}>Eliminar serie</button>
                   )}
                 </div>
-                <div className="text-xs text-slate-400">Se guarda localmente</div>
+                <div className="text-xs text-slate-400">Se guarda localmente y (si está activo) en la nube</div>
               </div>
             </div>
           </div>
