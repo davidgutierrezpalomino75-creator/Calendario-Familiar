@@ -52,7 +52,6 @@
 
     function isoDate(date) {
       const d = new Date(date);
-      // timezone-agnostic date string yyyy-mm-dd
       const year = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2,'0');
       const day = String(d.getDate()).padStart(2,'0');
@@ -108,12 +107,8 @@
     function loadState() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        // initialize empty structure with four member slots
         const init = {
-          members: [
-            // up to 4 slots; empty slots have id=null
-            null, null, null, null
-          ],
+          members: [ null, null, null, null ],
           activeMemberId: null,
           events: []
         };
@@ -150,12 +145,10 @@
       });
       const [filterMember, setFilterMember] = useState('all');
 
-      // persist store
       useEffect(() => {
         saveState(store);
       }, [store]);
 
-      // helpers for members
       const members = store.members;
       const activeMemberId = store.activeMemberId;
 
@@ -178,9 +171,7 @@
         setStore({ ...store, members: arr, activeMemberId: nextActive });
       }
 
-      // Event functions
       function saveEvent(event) {
-        // if editing existing by id, replace; else add
         const events = [...store.events];
         if (event.id) {
           const idx = events.findIndex(e => e.id === event.id);
@@ -198,6 +189,12 @@
         setStore({ ...store, events });
       }
 
+      function deleteSeries(masterId) {
+        const events = store.events.filter(e => e.id !== masterId && e.masterId !== masterId);
+        // also remove any exdates on other masters? Not needed.
+        setStore({ ...store, events });
+      }
+
       function addExdateToMaster(masterId, dateStr) {
         const events = store.events.map(e => {
           if (e.id === masterId) {
@@ -211,7 +208,6 @@
       }
 
       function createOverrideForInstance(master, overrideData) {
-        // add exdate to master and create new event referencing masterId
         addExdateToMaster(master.id, overrideData.date);
         const newEv = {
           id: uid('ev'),
@@ -229,45 +225,37 @@
         setStore({ ...store, events });
       }
 
-      // Query events for a visible range
       function eventsInRange(startDate, endDate) {
-        // startDate/endDate inclusive (yyyy-mm-dd)
         const visible = [];
         const s = new Date(startDate + 'T00:00:00');
         const e = new Date(endDate + 'T00:00:00');
 
         for (const ev of store.events) {
           if (ev.repeatWeekly) {
-            // master event
             const evDate = new Date(ev.date + 'T00:00:00');
-            if (evDate > e) continue; // initial occurrence beyond range
-            // iterate weekly from ev.date until > endDate
+            if (evDate > e) continue;
+            const seriesEnd = ev.endDate ? new Date(ev.endDate + 'T00:00:00') : null;
             let cur = ev.date;
             while (new Date(cur + 'T00:00:00') <= e) {
-              // check >= startDate
+              if (seriesEnd && new Date(cur + 'T00:00:00') > seriesEnd) break;
               if (new Date(cur + 'T00:00:00') >= s) {
-                // skip exdates
                 const ex = ev.exdates || [];
                 if (!ex.includes(cur)) {
-                  // check if overridden by an event referencing masterId (we'll include overrides separately)
                   visible.push({ ...ev, instanceDate: cur, isInstanceOfMaster: true });
                 }
               }
               cur = addDays(cur, 7);
             }
           } else if (ev.masterId) {
-            // override instance created via createOverrideForInstance: include only if in range
             if (compareDates(ev.date, startDate) >= 0 && compareDates(ev.date, endDate) <= 0) {
               visible.push({ ...ev, instanceDate: ev.date, isOverride: true });
             }
           } else {
-            // single event
             if (compareDates(ev.date, startDate) >= 0 && compareDates(ev.date, endDate) <= 0) {
               visible.push({ ...ev, instanceDate: ev.date });
             }
           }
         }
-        // sort by date/time
         visible.sort((a,b) => {
           if (a.instanceDate < b.instanceDate) return -1;
           if (a.instanceDate > b.instanceDate) return 1;
@@ -278,7 +266,6 @@
         return visible;
       }
 
-      // Calendar navigation
       function gotoPrev() {
         if (view === 'month') {
           const y = cursor.year;
@@ -286,7 +273,6 @@
           const d = new Date(y, m, 1);
           setCursor({ year: d.getFullYear(), month: d.getMonth(), date: isoDate(d) });
         } else {
-          // week view: subtract 7 days from current date
           const newDate = addDays(cursor.date, -7);
           const dd = new Date(newDate + 'T00:00:00');
           setCursor({ year: dd.getFullYear(), month: dd.getMonth(), date: newDate });
@@ -309,7 +295,6 @@
         setCursor({ year: today.getFullYear(), month: today.getMonth(), date: isoDate(today) });
       }
 
-      // opening modals
       function openProfileModal(index) {
         setEditingSlotIndex(index);
         setShowProfileModal(true);
@@ -326,15 +311,14 @@
           memberId: preMember,
           color: preMember ? (members.find(m=>m && m.id===preMember)?.color) : '#60a5fa',
           repeatWeekly: false,
+          endDate: '',
           exdates: []
         });
         setShowEventModal(true);
       }
 
       function openEditEventModal(event, instanceDate=null) {
-        // For recurring master instance editing: if user wants to edit only this instance we will create override.
         if (event.isInstanceOfMaster && !event.isOverride) {
-          // Show modal in special "single instance editing" mode
           setEditingEvent({
             id: null,
             editingMaster: event,
@@ -349,14 +333,12 @@
           });
           setShowEventModal(true);
         } else {
-          // normal event (single or override)
           const original = store.events.find(e => e.id === event.id) || event;
           setEditingEvent({ ...original });
           setShowEventModal(true);
         }
       }
 
-      // computed visible range
       const visibleRange = useMemo(() => {
         if (view === 'month') {
           const y = cursor.year;
@@ -375,13 +357,11 @@
         return eventsInRange(visibleRange.start, visibleRange.end);
       }, [store.events, visibleRange]);
 
-      // Filter events by member filter
       const filteredEvents = visibleEvents.filter(ev => {
         if (filterMember === 'all') return true;
         return ev.memberId === filterMember;
       });
 
-      // UI small helpers
       const memberList = members.map((m, i) => ({ slot: i, data: m })).filter(x => x.data);
 
       return (
@@ -482,15 +462,12 @@
               members={members}
               onClose={() => { setShowEventModal(false); setEditingEvent(null); }}
               onSave={(ev)=> {
-                // if editingMaster present, create override single-instance
                 if (ev.editingMaster) {
                   createOverrideForInstance(ev.editingMaster, ev);
                 } else {
-                  // if ev.id exists -> update existing
                   if (ev.id) {
                     saveEvent(ev);
                   } else {
-                    // create new
                     saveEvent(ev);
                   }
                 }
@@ -498,7 +475,6 @@
                 setEditingEvent(null);
               }}
               onDelete={(ev)=>{
-                // if editing master instance (we opened override editing) where ev.editingMaster exists => deletion should add exdate to master
                 if (ev.editingMaster) {
                   addExdateToMaster(ev.editingMaster.id, ev.date);
                 } else {
@@ -506,6 +482,13 @@
                 }
                 setShowEventModal(false);
                 setEditingEvent(null);
+              }}
+              onDeleteSeries={(masterId)=>{
+                if (confirm('¿Eliminar toda la serie? Esta acción borrará la extraescolar recurrente y sus sobrescrituras.')) {
+                  deleteSeries(masterId);
+                  setShowEventModal(false);
+                  setEditingEvent(null);
+                }
               }}
               activeMemberId={activeMemberId}
             />
@@ -551,10 +534,7 @@
      * Profile Manager (modal)
      ***********************/
     function ProfileManager({ members, onClose, onUpsert, onSelectActive, activeMemberId, editingSlotIndex, setEditingSlotIndex, onRemove }) {
-      const [local, setLocal] = useState(() => {
-        // prepare clone of members
-        return members.map(m => m ? { ...m } : null);
-      });
+      const [local, setLocal] = useState(() => members.map(m => m ? { ...m } : null));
       const [slot, setSlot] = useState(editingSlotIndex ?? 0);
       const fileRef = useRef();
 
@@ -710,13 +690,10 @@
      * MonthView
      ***********************/
     function MonthView({ year, month, events, members, onDayClick, onEventClick, activeMemberId }) {
-      // build grid for month
       const first = new Date(year, month, 1);
-      const startDay = first.getDay(); // 0 Sun
-      // determine starting Monday for grid? We'll show Sun..Sat but mobile compact, keep Sun first
+      const startDay = first.getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
-      // calculate leading empty cells
-      const leading = startDay; // number of days from Sun
+      const leading = startDay;
       const totalCells = Math.ceil((leading + daysInMonth) / 7) * 7;
       const cells = Array.from({length: totalCells}).map((_, idx) => {
         const dayNumber = idx - leading + 1;
@@ -769,7 +746,6 @@
      * WeekView
      ***********************/
     function WeekView({ startDate, events, members, onDayClick, onEventClick, activeMemberId }) {
-      // startDate is the monday or sunday depending on startOfWeek; our startOfWeek above uses Monday
       const days = Array.from({length:7}).map((_,i)=> addDays(startDate, i));
       return (
         <div className="bg-white rounded-2xl p-3 shadow-sm overflow-x-auto">
@@ -817,7 +793,7 @@
     /***********************
      * Event Modal
      ***********************/
-    function EventModal({ event, members, onClose, onSave, onDelete, activeMemberId }) {
+    function EventModal({ event, members, onClose, onSave, onDelete, onDeleteSeries, activeMemberId }) {
       const [form, setForm] = useState({ ...event });
       useEffect(()=> setForm({ ...event }), [event]);
 
@@ -826,17 +802,32 @@
       }
 
       function save() {
-        // validations
         if (!form.title || !form.date) {
           alert('Añade título y fecha');
           return;
         }
-        // if editingMaster present (override): pass editingMaster property inside form
+        if (form.repeatWeekly && form.type === 'Extraescolar' && form.endDate) {
+          if (compareDates(form.endDate, form.date) < 0) {
+            alert('La fecha de fin debe ser igual o posterior a la fecha de inicio.');
+            return;
+          }
+        }
         onSave(form);
       }
 
       function remove() {
-        if (confirm('¿Eliminar este evento?')) onDelete(form);
+        if (form.editingMaster) {
+          if (confirm('¿Eliminar esta instancia? (se añadirá una excepción a la serie)')) {
+            onDelete(form);
+          }
+        } else if (form.repeatWeekly) {
+          // master event
+          if (confirm('Esta es una extraescolar recurrente. Para borrar puedes eliminar una instancia concreta o toda la serie. ¿Eliminar toda la serie?')) {
+            onDeleteSeries(form.id);
+          }
+        } else {
+          if (confirm('¿Eliminar este evento?')) onDelete(form);
+        }
       }
 
       return (
@@ -876,6 +867,7 @@
                   <option>Examen</option>
                   <option>Extraescolar</option>
                   <option>Nota</option>
+                  <option>Otro</option>
                 </select>
               </div>
 
@@ -892,14 +884,36 @@
                 <label htmlFor="repeatWeekly" className="text-sm text-slate-600">Repetir semanalmente (ideal para extraescolares)</label>
               </div>
 
+              {(form.repeatWeekly && form.type === 'Extraescolar') && (
+                <div>
+                  <label className="block text-xs text-slate-500">Fecha de fin de la serie (opcional)</label>
+                  <input type="date" className="w-full border rounded px-3 py-2" value={form.endDate || ''} onChange={e=>update('endDate', e.target.value)} />
+                  <div className="text-xs text-slate-400 mt-1">Si la dejas vacía la serie seguirá indefinidamente hasta que la borres.</div>
+                </div>
+              )}
+
               {form.editingMaster && (
-                <div className="text-xs text-slate-500">Estás editando solo esta instancia (se creará una excepción en la serie)</div>
+                <div className="text-xs text-slate-500">Estás editando solo esta instancia (se creará una excepción en la serie). Para cambiar la serie completa, edita el evento maestro si está disponible.</div>
               )}
 
               <div className="flex items-center gap-2 justify-between mt-3">
                 <div className="flex items-center gap-2">
                   <button className="px-4 py-2 bg-slate-900 text-white rounded" onClick={save}>Guardar</button>
-                  {form.id && <button className="px-4 py-2 bg-white border rounded" onClick={remove}>Eliminar</button>}
+
+                  {!form.repeatWeekly && form.id && !form.editingMaster && (
+                    <button className="px-4 py-2 bg-white border rounded" onClick={()=>{ if (confirm('¿Eliminar este evento?')) onDelete(form); }}>Eliminar</button>
+                  )}
+
+                  {form.editingMaster && (
+                    <>
+                      <button className="px-4 py-2 bg-white border rounded" onClick={()=>{ if (confirm('Eliminar solo esta instancia de la serie?')) onDelete(form); }}>Eliminar instancia</button>
+                      <button className="px-4 py-2 bg-red-600 text-white rounded" onClick={()=>{ if (confirm('Eliminar toda la serie?')) onDeleteSeries(form.editingMaster.id); }}>Eliminar toda la serie</button>
+                    </>
+                  )}
+
+                  {form.repeatWeekly && !form.editingMaster && (
+                    <button className="px-4 py-2 bg-red-600 text-white rounded" onClick={()=>{ if (confirm('Eliminar toda la serie?')) onDeleteSeries(form.id); }}>Eliminar serie</button>
+                  )}
                 </div>
                 <div className="text-xs text-slate-400">Se guarda localmente</div>
               </div>
