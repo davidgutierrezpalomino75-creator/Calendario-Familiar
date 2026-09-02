@@ -1,217 +1,918 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MIT</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #000000;
-    --white: #ffffff;
-    --gray: #6f6f6f;
-    --line: rgba(255,255,255,0.14);
-  }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--white);
-    font-family: 'Space Grotesk', sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 32px 20px;
-  }
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Organizador Familiar</title>
 
-  h1 {
-    font-weight: 700;
-    font-size: 56px;
-    letter-spacing: 4px;
-    margin: 0;
-    line-height: 1;
-  }
-  .sub {
-    font-family: 'JetBrains Mono', monospace;
-    color: var(--gray);
-    font-size: 12px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-top: 10px;
-    margin-bottom: 56px;
-  }
-
-  .orb {
-    width: 132px;
-    height: 132px;
-    border-radius: 50%;
-    border: 2px solid var(--white);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.3s ease;
-  }
-  .orb:hover { transform: scale(1.03); }
-  .orb svg { width: 40px; height: 40px; fill: var(--white); }
-
-  .orb.listening {
-    animation: pulse 1s ease-in-out infinite;
-    box-shadow: 0 0 0 rgba(255,255,255,0.4);
-  }
-  @keyframes pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.35); }
-    50% { box-shadow: 0 0 0 18px rgba(255,255,255,0); }
-  }
-
-  #status {
-    margin-top: 22px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--gray);
-    min-height: 18px;
-  }
-
-  .panel {
-    margin-top: 32px;
-    width: 100%;
-    max-width: 520px;
-    border-top: 1px solid var(--line);
-    padding-top: 20px;
-    min-height: 50px;
-    font-size: 17px;
-    line-height: 1.6;
-    font-weight: 400;
-  }
-  .panel .you {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--gray);
-    margin-bottom: 6px;
-  }
-  .panel .you-text { color: var(--gray); margin-bottom: 18px; }
-  .panel .mit-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--white);
-    margin-bottom: 6px;
-  }
-</style>
-</head>
-<body>
-
-  <h1>MIT</h1>
-  <div class="sub">toca para hablar</div>
-
-  <div class="orb" id="orb">
-    <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
-  </div>
-
-  <div id="status">en espera</div>
-
-  <div class="panel" id="panel">
-    <div class="mit-label">Mit</div>
-    <div>Listo cuando quieras.</div>
-  </div>
-
+  <!-- Tailwind Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    // Configuración fija (no editable desde la interfaz)
-    const WORKER_URL = 'https://mi-asistente.deivid7575.workers.dev';
-    const USER_ID = '1121764396532781207';
-    const CHANNEL_ID = '1536519525489573928';
+    // Tailwind config for rounded, shadows, custom colors if needed
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#0f172a'
+          }
+        }
+      }
+    }
+  </script>
 
-    const orb = document.getElementById('orb');
-    const statusEl = document.getElementById('status');
-    const panel = document.getElementById('panel');
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    let recognition;
-    if (SpeechRecognition) {
-      recognition = new SpeechRecognition();
-      recognition.lang = 'es-ES';
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+  <style>
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    /* Small helper for event pill overflow */
+    .line-clamp-1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Simple swipe hint for weekly/daily */
+    .swipe-hint { height: 4px; width: 40px; border-radius: 9999px; background: #e5e7eb; margin: 6px auto; }
+  </style>
+
+  <!-- React & ReactDOM UMD -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Use Babel for JSX in single-file deployment -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div id="root" class="min-h-screen"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    /***********************
+     * Utilities
+     ***********************/
+    function uid(prefix='id') {
+      return prefix + '_' + Math.random().toString(36).slice(2,9);
     }
 
-    // --- Selección de voz masculina / grave, estilo JARVIS ---
-    let voices = [];
-    function loadVoices() { voices = speechSynthesis.getVoices(); }
-    loadVoices();
-    if (typeof speechSynthesis !== 'undefined') {
-      speechSynthesis.onvoiceschanged = loadVoices;
+    function isoDate(date) {
+      const d = new Date(date);
+      // timezone-agnostic date string yyyy-mm-dd
+      const year = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2,'0');
+      const day = String(d.getDate()).padStart(2,'0');
+      return `${year}-${m}-${day}`;
     }
 
-    function pickVoice() {
-      // Busca voces españolas con nombre típico masculino
-      const masculina = voices.find(v => /es/i.test(v.lang) && /(pablo|jorge|diego|male|hombre)/i.test(v.name));
-      if (masculina) return masculina;
-      // Si no hay, cualquier voz en español
-      return voices.find(v => /es/i.test(v.lang)) || null;
+    function addDays(dateStr, days) {
+      const d = new Date(dateStr + 'T00:00:00');
+      d.setDate(d.getDate() + days);
+      return isoDate(d);
     }
 
-    function speak(text) {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'es-ES';
-      utter.pitch = 0.7;   // más grave
-      utter.rate = 0.98;
-      const voice = pickVoice();
-      if (voice) utter.voice = voice;
-      speechSynthesis.speak(utter);
+    function daysBetween(a, b) {
+      const da = new Date(a + 'T00:00:00');
+      const db = new Date(b + 'T00:00:00');
+      const diff = Math.round((db - da) / (1000*60*60*24));
+      return diff;
     }
 
-    function renderPanel(you, mit) {
-      panel.innerHTML = `
-        ${you ? `<div class="you">Tú</div><div class="you-text">${you}</div>` : ''}
-        <div class="mit-label">Mit</div>
-        <div>${mit}</div>
-      `;
+    function startOfMonth(year, month) {
+      return isoDate(new Date(year, month, 1));
+    }
+    function endOfMonth(year, month) {
+      return isoDate(new Date(year, month + 1, 0));
     }
 
-    async function sendToMit(promptText) {
-      renderPanel(promptText, 'Procesando...');
-      statusEl.textContent = 'procesando';
+    function startOfWeek(dateStr) {
+      // start on Monday
+      const d = new Date(dateStr + 'T00:00:00');
+      const day = d.getDay(); // 0 Sun ... 6 Sat
+      const diff = (day === 0) ? -6 : 1 - day;
+      d.setDate(d.getDate() + diff);
+      return isoDate(d);
+    }
 
+    function formatDateHuman(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      const options = { weekday: 'short', day: 'numeric', month: 'short' };
+      return d.toLocaleDateString(undefined, options);
+    }
+
+    function compareDates(a, b) {
+      if (a < b) return -1;
+      if (a > b) return 1;
+      return 0;
+    }
+
+    /***********************
+     * Local Storage Layer
+     ***********************/
+    const STORAGE_KEY = 'familyOrganizer.v1';
+
+    function loadState() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        // initialize empty structure with four member slots
+        const init = {
+          members: [
+            // up to 4 slots; empty slots have id=null
+            null, null, null, null
+          ],
+          activeMemberId: null,
+          events: []
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(init));
+        return init;
+      }
       try {
-        const res = await fetch(WORKER_URL + '/api/voice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: USER_ID, channelId: CHANNEL_ID, promptText })
+        return JSON.parse(raw);
+      } catch (e) {
+        console.error('Error parsing storage, resetting', e);
+        const init = { members:[null,null,null,null], activeMemberId:null, events:[] };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(init));
+        return init;
+      }
+    }
+
+    function saveState(next) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    }
+
+    /***********************
+     * App
+     ***********************/
+    function App() {
+      const [store, setStore] = useState(() => loadState());
+      const [showProfileModal, setShowProfileModal] = useState(false);
+      const [editingSlotIndex, setEditingSlotIndex] = useState(null);
+      const [showEventModal, setShowEventModal] = useState(false);
+      const [editingEvent, setEditingEvent] = useState(null);
+      const [view, setView] = useState('month'); // month | week
+      const [cursor, setCursor] = useState(() => {
+        const today = new Date();
+        return { year: today.getFullYear(), month: today.getMonth(), date: isoDate(today) };
+      });
+      const [filterMember, setFilterMember] = useState('all');
+
+      // persist store
+      useEffect(() => {
+        saveState(store);
+      }, [store]);
+
+      // helpers for members
+      const members = store.members;
+      const activeMemberId = store.activeMemberId;
+
+      function upsertMember(index, member) {
+        const arr = [...store.members];
+        arr[index] = member;
+        const next = { ...store, members: arr, activeMemberId: member?.id ?? store.activeMemberId };
+        setStore(next);
+      }
+
+      function selectActive(memberId) {
+        setStore({ ...store, activeMemberId: memberId });
+      }
+
+      function removeMember(index) {
+        const arr = [...store.members];
+        const removed = arr[index];
+        arr[index] = null;
+        const nextActive = (store.activeMemberId === removed?.id) ? null : store.activeMemberId;
+        setStore({ ...store, members: arr, activeMemberId: nextActive });
+      }
+
+      // Event functions
+      function saveEvent(event) {
+        // if editing existing by id, replace; else add
+        const events = [...store.events];
+        if (event.id) {
+          const idx = events.findIndex(e => e.id === event.id);
+          if (idx !== -1) events[idx] = event;
+          else events.push(event);
+        } else {
+          event.id = uid('ev');
+          events.push(event);
+        }
+        setStore({ ...store, events });
+      }
+
+      function deleteEventById(id) {
+        let events = store.events.filter(e => e.id !== id);
+        setStore({ ...store, events });
+      }
+
+      function addExdateToMaster(masterId, dateStr) {
+        const events = store.events.map(e => {
+          if (e.id === masterId) {
+            const ex = new Set(e.exdates || []);
+            ex.add(dateStr);
+            return { ...e, exdates: Array.from(ex) };
+          }
+          return e;
         });
-        const data = await res.json();
-        const respuesta = data.responseText || 'No he podido procesar eso.';
-        renderPanel(promptText, respuesta);
-        statusEl.textContent = 'en espera';
-        speak(respuesta);
-      } catch (err) {
-        renderPanel(promptText, `Error de conexión: ${err.message}`);
-        statusEl.textContent = 'error';
+        setStore({ ...store, events });
       }
+
+      function createOverrideForInstance(master, overrideData) {
+        // add exdate to master and create new event referencing masterId
+        addExdateToMaster(master.id, overrideData.date);
+        const newEv = {
+          id: uid('ev'),
+          title: overrideData.title,
+          type: overrideData.type,
+          date: overrideData.date,
+          time: overrideData.time,
+          memberId: overrideData.memberId,
+          color: overrideData.color,
+          repeatWeekly: false,
+          masterId: master.id,
+          exdates: []
+        };
+        const events = [...store.events, newEv];
+        setStore({ ...store, events });
+      }
+
+      // Query events for a visible range
+      function eventsInRange(startDate, endDate) {
+        // startDate/endDate inclusive (yyyy-mm-dd)
+        const visible = [];
+        const s = new Date(startDate + 'T00:00:00');
+        const e = new Date(endDate + 'T00:00:00');
+
+        for (const ev of store.events) {
+          if (ev.repeatWeekly) {
+            // master event
+            const evDate = new Date(ev.date + 'T00:00:00');
+            if (evDate > e) continue; // initial occurrence beyond range
+            // iterate weekly from ev.date until > endDate
+            let cur = ev.date;
+            while (new Date(cur + 'T00:00:00') <= e) {
+              // check >= startDate
+              if (new Date(cur + 'T00:00:00') >= s) {
+                // skip exdates
+                const ex = ev.exdates || [];
+                if (!ex.includes(cur)) {
+                  // check if overridden by an event referencing masterId (we'll include overrides separately)
+                  visible.push({ ...ev, instanceDate: cur, isInstanceOfMaster: true });
+                }
+              }
+              cur = addDays(cur, 7);
+            }
+          } else if (ev.masterId) {
+            // override instance created via createOverrideForInstance: include only if in range
+            if (compareDates(ev.date, startDate) >= 0 && compareDates(ev.date, endDate) <= 0) {
+              visible.push({ ...ev, instanceDate: ev.date, isOverride: true });
+            }
+          } else {
+            // single event
+            if (compareDates(ev.date, startDate) >= 0 && compareDates(ev.date, endDate) <= 0) {
+              visible.push({ ...ev, instanceDate: ev.date });
+            }
+          }
+        }
+        // sort by date/time
+        visible.sort((a,b) => {
+          if (a.instanceDate < b.instanceDate) return -1;
+          if (a.instanceDate > b.instanceDate) return 1;
+          const ta = a.time || '';
+          const tb = b.time || '';
+          return ta.localeCompare(tb);
+        });
+        return visible;
+      }
+
+      // Calendar navigation
+      function gotoPrev() {
+        if (view === 'month') {
+          const y = cursor.year;
+          const m = cursor.month - 1;
+          const d = new Date(y, m, 1);
+          setCursor({ year: d.getFullYear(), month: d.getMonth(), date: isoDate(d) });
+        } else {
+          // week view: subtract 7 days from current date
+          const newDate = addDays(cursor.date, -7);
+          const dd = new Date(newDate + 'T00:00:00');
+          setCursor({ year: dd.getFullYear(), month: dd.getMonth(), date: newDate });
+        }
+      }
+      function gotoNext() {
+        if (view === 'month') {
+          const y = cursor.year;
+          const m = cursor.month + 1;
+          const d = new Date(y, m, 1);
+          setCursor({ year: d.getFullYear(), month: d.getMonth(), date: isoDate(d) });
+        } else {
+          const newDate = addDays(cursor.date, 7);
+          const dd = new Date(newDate + 'T00:00:00');
+          setCursor({ year: dd.getFullYear(), month: dd.getMonth(), date: newDate });
+        }
+      }
+      function gotoToday() {
+        const today = new Date();
+        setCursor({ year: today.getFullYear(), month: today.getMonth(), date: isoDate(today) });
+      }
+
+      // opening modals
+      function openProfileModal(index) {
+        setEditingSlotIndex(index);
+        setShowProfileModal(true);
+      }
+
+      function openNewEventModal(date) {
+        const preMember = activeMemberId || (members.find(m=>m)?.id) || null;
+        setEditingEvent({
+          id: null,
+          title: '',
+          type: 'Tarea',
+          date: date || cursor.date,
+          time: '',
+          memberId: preMember,
+          color: preMember ? (members.find(m=>m && m.id===preMember)?.color) : '#60a5fa',
+          repeatWeekly: false,
+          exdates: []
+        });
+        setShowEventModal(true);
+      }
+
+      function openEditEventModal(event, instanceDate=null) {
+        // For recurring master instance editing: if user wants to edit only this instance we will create override.
+        if (event.isInstanceOfMaster && !event.isOverride) {
+          // Show modal in special "single instance editing" mode
+          setEditingEvent({
+            id: null,
+            editingMaster: event,
+            title: event.title,
+            type: event.type,
+            date: instanceDate || event.instanceDate,
+            time: event.time || '',
+            memberId: event.memberId,
+            color: event.color,
+            repeatWeekly: false,
+            exdates: []
+          });
+          setShowEventModal(true);
+        } else {
+          // normal event (single or override)
+          const original = store.events.find(e => e.id === event.id) || event;
+          setEditingEvent({ ...original });
+          setShowEventModal(true);
+        }
+      }
+
+      // computed visible range
+      const visibleRange = useMemo(() => {
+        if (view === 'month') {
+          const y = cursor.year;
+          const m = cursor.month;
+          const start = startOfMonth(y,m);
+          const end = endOfMonth(y,m);
+          return { start, end };
+        } else {
+          const start = startOfWeek(cursor.date);
+          const end = addDays(start, 6);
+          return { start, end };
+        }
+      }, [view, cursor]);
+
+      const visibleEvents = useMemo(() => {
+        return eventsInRange(visibleRange.start, visibleRange.end);
+      }, [store.events, visibleRange]);
+
+      // Filter events by member filter
+      const filteredEvents = visibleEvents.filter(ev => {
+        if (filterMember === 'all') return true;
+        return ev.memberId === filterMember;
+      });
+
+      // UI small helpers
+      const memberList = members.map((m, i) => ({ slot: i, data: m })).filter(x => x.data);
+
+      return (
+        <div className="min-h-screen pb-24">
+          <div className="max-w-xl mx-auto p-4">
+            <Header
+              members={members}
+              activeMemberId={activeMemberId}
+              onOpenProfile={() => setShowProfileModal(true)}
+              onOpenProfileSlot={openProfileModal}
+              onSelectActive={selectActive}
+              filterMember={filterMember}
+              setFilterMember={setFilterMember}
+            />
+
+            <div className="mt-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <button className={`px-3 py-2 rounded-lg text-sm ${view==='month' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 shadow-sm'}`} onClick={()=>setView('month')}>Mes</button>
+                  <button className={`px-3 py-2 rounded-lg text-sm ${view==='week' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 shadow-sm'}`} onClick={()=>setView('week')}>Semana</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button className="text-sm text-slate-600 px-2 py-1 rounded" onClick={gotoPrev} aria-label="Anterior">‹</button>
+                  <button className="text-sm text-slate-600 px-2 py-1 rounded" onClick={gotoToday}>Hoy</button>
+                  <button className="text-sm text-slate-600 px-2 py-1 rounded" onClick={gotoNext} aria-label="Siguiente">›</button>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                {view === 'month'
+                  ? <MonthView
+                      year={cursor.year}
+                      month={cursor.month}
+                      events={filteredEvents}
+                      members={members}
+                      onDayClick={(d)=>openNewEventModal(d)}
+                      onEventClick={(ev)=>openEditEventModal(ev, ev.instanceDate)}
+                      activeMemberId={activeMemberId}
+                    />
+                  : <WeekView
+                      startDate={visibleRange.start}
+                      events={filteredEvents}
+                      members={members}
+                      onDayClick={(d)=>openNewEventModal(d)}
+                      onEventClick={(ev)=>openEditEventModal(ev, ev.instanceDate)}
+                      activeMemberId={activeMemberId}
+                    />
+                }
+              </div>
+
+              <div className="mt-4 flex gap-2 items-center">
+                <button className="flex-1 bg-slate-900 text-white px-4 py-3 rounded-lg shadow" onClick={()=>openNewEventModal(cursor.date)}>
+                  + Añadir evento
+                </button>
+                <button className="bg-white border border-slate-200 px-3 py-3 rounded-lg text-slate-700 shadow-sm" onClick={()=>{ setShowProfileModal(true); }}>
+                  Perfiles
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3">
+            <div className="max-w-xl mx-auto flex items-center justify-between">
+              <div className="text-sm text-slate-500">Organizador Familiar • Offline • Mobile-first</div>
+              <div className="text-right">
+                <div className="text-xs text-slate-500">Filtro rápido:</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <button onClick={()=>setFilterMember('all')} className={`px-3 py-1 rounded ${filterMember==='all' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 border'}`}>Todos</button>
+                  {members.map((m, idx) => m && (
+                    <button key={m.id} onClick={()=>setFilterMember(m.id)}
+                      className={`px-3 py-1 rounded flex items-center gap-2 ${filterMember===m.id ? 'ring-2 ring-offset-1 ring-slate-900 text-white' : 'bg-white border'}`}
+                      style={{ backgroundColor: filterMember===m.id ? m.color : undefined, color: filterMember===m.id ? '#fff' : undefined }}>
+                      <span className="w-6 h-6 rounded-full flex items-center justify-center text-sm" style={{ backgroundColor: m.color, color: '#fff' }}>{m.avatarEmoji || m.name?.[0]?.toUpperCase() || '👤'}</span>
+                      <span className="text-xs">{m.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </footer>
+
+          {showProfileModal && (
+            <ProfileManager
+              members={members}
+              onClose={() => { setShowProfileModal(false); setEditingSlotIndex(null); }}
+              onUpsert={upsertMember}
+              onSelectActive={selectActive}
+              activeMemberId={activeMemberId}
+              editingSlotIndex={editingSlotIndex}
+              setEditingSlotIndex={setEditingSlotIndex}
+              onRemove={removeMember}
+            />
+          )}
+
+          {showEventModal && editingEvent && (
+            <EventModal
+              event={editingEvent}
+              members={members}
+              onClose={() => { setShowEventModal(false); setEditingEvent(null); }}
+              onSave={(ev)=> {
+                // if editingMaster present, create override single-instance
+                if (ev.editingMaster) {
+                  createOverrideForInstance(ev.editingMaster, ev);
+                } else {
+                  // if ev.id exists -> update existing
+                  if (ev.id) {
+                    saveEvent(ev);
+                  } else {
+                    // create new
+                    saveEvent(ev);
+                  }
+                }
+                setShowEventModal(false);
+                setEditingEvent(null);
+              }}
+              onDelete={(ev)=>{
+                // if editing master instance (we opened override editing) where ev.editingMaster exists => deletion should add exdate to master
+                if (ev.editingMaster) {
+                  addExdateToMaster(ev.editingMaster.id, ev.date);
+                } else {
+                  deleteEventById(ev.id);
+                }
+                setShowEventModal(false);
+                setEditingEvent(null);
+              }}
+              activeMemberId={activeMemberId}
+            />
+          )}
+        </div>
+      );
     }
 
-    orb.addEventListener('click', () => {
-      if (!recognition) {
-        statusEl.textContent = 'voz no soportada — usa Chrome';
-        return;
-      }
-      orb.classList.add('listening');
-      statusEl.textContent = 'escuchando...';
-      recognition.start();
-    });
-
-    if (recognition) {
-      recognition.onresult = (event) => sendToMit(event.results[0][0].transcript);
-      recognition.onerror = () => { statusEl.textContent = 'no te he oído bien'; };
-      recognition.onend = () => orb.classList.remove('listening');
+    /***********************
+     * Header
+     ***********************/
+    function Header({ members, activeMemberId, onOpenProfile, onOpenProfileSlot, onSelectActive, filterMember, setFilterMember }) {
+      const hasMembers = members.some(Boolean);
+      const active = members.find(m => m && m.id === activeMemberId);
+      return (
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-slate-500">Organizador Familiar</div>
+            <div className="mt-1 text-lg font-semibold text-slate-900">Tu calendario</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              {members.map((m, idx) => m ? (
+                <button key={m.id} onClick={() => onSelectActive(m.id)}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${activeMemberId===m.id ? 'ring-2 ring-offset-1 ring-slate-900' : 'bg-white shadow'}`}
+                  style={{ backgroundColor: m.color, color: '#fff' }}
+                  title={m.name}>
+                  {m.avatarEmoji || m.name?.[0]?.toUpperCase() || '👤'}
+                </button>
+              ) : (
+                <button key={'slot'+idx} onClick={() => onOpenProfileSlot(idx)} className="w-10 h-10 rounded-full bg-white border border-dashed flex items-center justify-center text-slate-400 text-sm">+</button>
+              ))}
+            </div>
+            <button onClick={onOpenProfile} className="p-2 rounded-lg bg-white shadow">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-600" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a5 5 0 100-10 5 5 0 000 10zm-7 7a7 7 0 0114 0H3z" /></svg>
+            </button>
+          </div>
+        </div>
+      );
     }
+
+    /***********************
+     * Profile Manager (modal)
+     ***********************/
+    function ProfileManager({ members, onClose, onUpsert, onSelectActive, activeMemberId, editingSlotIndex, setEditingSlotIndex, onRemove }) {
+      const [local, setLocal] = useState(() => {
+        // prepare clone of members
+        return members.map(m => m ? { ...m } : null);
+      });
+      const [slot, setSlot] = useState(editingSlotIndex ?? 0);
+      const fileRef = useRef();
+
+      useEffect(()=> {
+        if (editingSlotIndex != null) setSlot(editingSlotIndex);
+      }, [editingSlotIndex]);
+
+      function openEditorFor(i) {
+        setSlot(i);
+        setEditingSlotIndex(i);
+      }
+
+      function updateSlot(i, next) {
+        const arr = [...local];
+        arr[i] = next;
+        setLocal(arr);
+      }
+
+      function saveSlot(i) {
+        const m = local[i];
+        if (!m) return;
+        const toSave = { ...m };
+        if (!toSave.id) toSave.id = uid('mb');
+        onUpsert(i, toSave);
+      }
+
+      function handleImageUpload(e, i) {
+        const f = e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const arr = [...local];
+          arr[i] = { ...(arr[i]||{}), avatarDataUrl: reader.result };
+          setLocal(arr);
+        };
+        reader.readAsDataURL(f);
+      }
+
+      function clearSlot(i) {
+        const arr = [...local];
+        arr[i] = null;
+        setLocal(arr);
+        onRemove(i);
+      }
+
+      return (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
+          <div className="bg-white w-full sm:w-3/4 max-w-xl rounded-t-2xl sm:rounded-2xl p-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">Perfiles de la familia</h3>
+                <p className="text-sm text-slate-500">Hasta 4 miembros — se guardan en tu navegador</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="text-sm text-slate-600" onClick={onClose}>Cerrar</button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {Array.from({length:4}).map((_, i) => {
+                const m = local[i];
+                return (
+                  <div key={i} className="bg-slate-50 p-3 rounded-lg">
+                    {m ? (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl" style={{ backgroundColor: m.color || '#60a5fa', color:'#fff' }}>
+                            {m.avatarEmoji || m.name?.[0]?.toUpperCase() || '👤'}
+                          </div>
+                          <div>
+                            <div className="font-medium">{m.name}</div>
+                            <div className="text-xs text-slate-500">{m.email || ''}</div>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <button onClick={()=>openEditorFor(i)} className="px-3 py-1 bg-white border rounded text-sm">Editar</button>
+                          <button onClick={()=>onSelectActive(m.id)} className="px-3 py-1 bg-slate-900 text-white rounded text-sm">Seleccionar</button>
+                          <button onClick={()=>clearSlot(i)} className="px-2 py-1 text-sm text-red-600">Eliminar</button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="h-12 flex items-center justify-center text-slate-400">Vacío</div>
+                        <div className="mt-3">
+                          <button onClick={()=>openEditorFor(i)} className="px-3 py-2 bg-white border rounded text-sm w-full">Crear perfil</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-4">
+              <div className="text-sm font-medium">Editor</div>
+              <div className="mt-2 bg-white p-3 rounded-lg">
+                <ProfileEditor
+                  value={local[slot]}
+                  onChange={(next) => updateSlot(slot, next)}
+                  onUploadFile={(e) => handleImageUpload(e, slot)}
+                  onSave={() => saveSlot(slot)}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function ProfileEditor({ value, onChange, onUploadFile, onSave }) {
+      const local = value || { name: '', avatarEmoji: '👤', color: '#60a5fa' };
+      const [form, setForm] = useState(local);
+
+      useEffect(()=> {
+        setForm(local);
+      }, [value]);
+
+      function update(k, v) {
+        const next = { ...form, [k]: v };
+        setForm(next);
+        onChange && onChange(next);
+      }
+
+      return (
+        <>
+          <div className="flex items-center gap-3">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ backgroundColor: form.color, color: '#fff' }}>
+              {form.avatarEmoji || form.name?.[0]?.toUpperCase() || '👤'}
+            </div>
+            <div className="flex-1">
+              <input className="w-full border rounded px-3 py-2" placeholder="Nombre" value={form.name} onChange={e=>update('name', e.target.value)} />
+              <div className="mt-2 flex gap-2">
+                <input className="w-full border rounded px-3 py-2" placeholder="Emoji (ej. 🐻)" value={form.avatarEmoji} onChange={e=>update('avatarEmoji', e.target.value)} />
+                <input type="color" className="w-12 h-10 p-0" value={form.color} onChange={e=>update('color', e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <label className="block text-xs text-slate-500">Foto (opcional)</label>
+            <input type="file" accept="image/*" className="mt-1" onChange={onUploadFile} />
+            <div className="text-xs text-slate-400 mt-2">La imagen se guarda en tu navegador (localStorage).</div>
+          </div>
+
+          <div className="mt-3 flex justify-end">
+            <button className="px-4 py-2 bg-slate-900 text-white rounded" onClick={onSave}>Guardar</button>
+          </div>
+        </>
+      );
+    }
+
+    /***********************
+     * MonthView
+     ***********************/
+    function MonthView({ year, month, events, members, onDayClick, onEventClick, activeMemberId }) {
+      // build grid for month
+      const first = new Date(year, month, 1);
+      const startDay = first.getDay(); // 0 Sun
+      // determine starting Monday for grid? We'll show Sun..Sat but mobile compact, keep Sun first
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      // calculate leading empty cells
+      const leading = startDay; // number of days from Sun
+      const totalCells = Math.ceil((leading + daysInMonth) / 7) * 7;
+      const cells = Array.from({length: totalCells}).map((_, idx) => {
+        const dayNumber = idx - leading + 1;
+        const valid = dayNumber >= 1 && dayNumber <= daysInMonth;
+        const date = valid ? isoDate(new Date(year, month, dayNumber)) : null;
+        const dayEvents = date ? events.filter(ev => ev.instanceDate === date) : [];
+        return { date, dayNumber, valid, events: dayEvents };
+      });
+
+      const weekdayLabels = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+      return (
+        <div className="bg-white rounded-2xl p-3 shadow-sm">
+          <div className="text-center mb-2">
+            <div className="text-sm font-medium">{first.toLocaleString(undefined, { month: 'long', year: 'numeric' })}</div>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-xs">
+            {weekdayLabels.map((w)=> <div key={w} className="text-center text-slate-500">{w}</div>)}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 mt-2 text-sm">
+            {cells.map((c, i) => (
+              <div key={i} className={`min-h-[72px] p-1 rounded-lg ${c.valid ? 'bg-white' : 'bg-transparent'}`} onClick={()=>c.valid && onDayClick(c.date)}>
+                <div className="flex items-start justify-between">
+                  <div className={`text-xs font-medium ${c.valid ? 'text-slate-700' : 'text-slate-400'}`}>{c.valid ? c.dayNumber : ''}</div>
+                </div>
+                <div className="mt-1 flex flex-col gap-1">
+                  {c.events.slice(0,2).map(ev => {
+                    const member = members.find(m=>m && m.id===ev.memberId);
+                    const color = member ? member.color : (ev.color || '#60a5fa');
+                    return (
+                      <button key={ev.id + '_' + ev.instanceDate}
+                        onClick={(e)=>{ e.stopPropagation(); onEventClick(ev); }}
+                        className="text-[12px] line-clamp-1 px-1 py-0.5 rounded-md text-white"
+                        style={{ backgroundColor: color }}>
+                        {ev.time ? ev.time + ' ' : ''}{ev.title}
+                      </button>
+                    );
+                  })}
+                  {c.events.length > 2 && <div className="text-[11px] text-slate-400">+{c.events.length-2} más</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    /***********************
+     * WeekView
+     ***********************/
+    function WeekView({ startDate, events, members, onDayClick, onEventClick, activeMemberId }) {
+      // startDate is the monday or sunday depending on startOfWeek; our startOfWeek above uses Monday
+      const days = Array.from({length:7}).map((_,i)=> addDays(startDate, i));
+      return (
+        <div className="bg-white rounded-2xl p-3 shadow-sm overflow-x-auto">
+          <div className="swipe-hint"></div>
+          <div className="flex gap-2">
+            {days.map(d => {
+              const dayEvents = events.filter(ev => ev.instanceDate === d);
+              const today = isoDate(new Date());
+              const isToday = d === today;
+              return (
+                <div key={d} className="min-w-[120px] p-2 rounded-lg border border-slate-100 bg-slate-50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className={`text-sm font-medium ${isToday ? 'text-slate-900' : 'text-slate-700'}`}>{new Date(d + 'T00:00:00').toLocaleString(undefined, { weekday: 'short' })}</div>
+                      <div className="text-xs text-slate-500">{new Date(d + 'T00:00:00').getDate()}</div>
+                    </div>
+                    <button onClick={()=>onDayClick(d)} className="text-xs text-slate-600">Añadir</button>
+                  </div>
+                  <div className="mt-2 flex flex-col gap-2">
+                    {dayEvents.length ? (
+                      dayEvents.map(ev => {
+                        const member = members.find(m=>m && m.id===ev.memberId);
+                        const color = member ? member.color : (ev.color || '#60a5fa');
+                        return (
+                          <button key={ev.id + '_' + ev.instanceDate} onClick={()=>onEventClick(ev)}
+                            className="w-full text-left rounded-lg px-2 py-1 flex items-center gap-2"
+                            style={{ backgroundColor: color, color: '#fff' }}>
+                            <div className="text-xs font-semibold">{ev.time || '—'}</div>
+                            <div className="text-xs line-clamp-1">{ev.title}</div>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="text-xs text-slate-400">Sin eventos</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    /***********************
+     * Event Modal
+     ***********************/
+    function EventModal({ event, members, onClose, onSave, onDelete, activeMemberId }) {
+      const [form, setForm] = useState({ ...event });
+      useEffect(()=> setForm({ ...event }), [event]);
+
+      function update(k, v) {
+        setForm(prev => ({ ...prev, [k]: v }));
+      }
+
+      function save() {
+        // validations
+        if (!form.title || !form.date) {
+          alert('Añade título y fecha');
+          return;
+        }
+        // if editingMaster present (override): pass editingMaster property inside form
+        onSave(form);
+      }
+
+      function remove() {
+        if (confirm('¿Eliminar este evento?')) onDelete(form);
+      }
+
+      return (
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
+          <div className="bg-white w-full sm:w-96 rounded-t-2xl sm:rounded-2xl p-4 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">{form.editingMaster ? 'Editar instancia' : (form.id ? 'Editar evento' : 'Nuevo evento')}</h3>
+                <div className="text-xs text-slate-500">Guarda en localStorage • Puedes marcar repetición semanal</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="text-sm text-slate-600" onClick={onClose}>Cerrar</button>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="block text-xs text-slate-500">Título</label>
+                <input className="w-full border rounded px-3 py-2" value={form.title} onChange={e=>update('title', e.target.value)} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-slate-500">Fecha</label>
+                  <input type="date" className="w-full border rounded px-3 py-2" value={form.date} onChange={e=>update('date', e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500">Hora</label>
+                  <input type="time" className="w-full border rounded px-3 py-2" value={form.time || ''} onChange={e=>update('time', e.target.value)} />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-500">Tipo</label>
+                <select className="w-full border rounded px-3 py-2" value={form.type} onChange={e=>update('type', e.target.value)}>
+                  <option>Tarea</option>
+                  <option>Examen</option>
+                  <option>Extraescolar</option>
+                  <option>Nota</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-500">Miembro asignado</label>
+                <select className="w-full border rounded px-3 py-2" value={form.memberId || ''} onChange={e=>update('memberId', e.target.value)}>
+                  <option value=''>(Sin asignar)</option>
+                  {members.map((m, i) => m && <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input id="repeatWeekly" type="checkbox" checked={form.repeatWeekly || false} onChange={e=>update('repeatWeekly', e.target.checked)} />
+                <label htmlFor="repeatWeekly" className="text-sm text-slate-600">Repetir semanalmente (ideal para extraescolares)</label>
+              </div>
+
+              {form.editingMaster && (
+                <div className="text-xs text-slate-500">Estás editando solo esta instancia (se creará una excepción en la serie)</div>
+              )}
+
+              <div className="flex items-center gap-2 justify-between mt-3">
+                <div className="flex items-center gap-2">
+                  <button className="px-4 py-2 bg-slate-900 text-white rounded" onClick={save}>Guardar</button>
+                  {form.id && <button className="px-4 py-2 bg-white border rounded" onClick={remove}>Eliminar</button>}
+                </div>
+                <div className="text-xs text-slate-400">Se guarda localmente</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /***********************
+     * Render
+     ***********************/
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
